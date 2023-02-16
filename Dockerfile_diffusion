@@ -1,0 +1,24 @@
+FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
+RUN apt-get update
+RUN python -m pip install --upgrade pip
+RUN python -m pip install --upgrade tables \ 
+                    matplotlib \
+                    pandas \
+                    sympy \
+                    h5py \
+                    tabulate \
+                    scikit-learn
+# For some reason has to be installed separately
+RUN python -m pip install jupyterlab
+RUN useradd -rm -d /home/developer -s /bin/bash -g root -G sudo -u 1000 developer
+RUN echo 'developer:AJas12!$' | chpasswd
+EXPOSE 8888
+WORKDIR /home/developer
+COPY ["Diffusion Model Tutorial.ipynb", "/home/developer/"]
+COPY ["helpers.py", "/home/developer/"]
+COPY ["shiba.jpg", "/home/developer/"]
+USER developer
+RUN jupyter notebook --generate-config
+RUN echo "c.NotebookApp.password='argon2:\$argon2id\$v=19\$m=10240,t=10,p=8\$pq7MvCpa2M1JYeiiLBvvSQ\$XkvBtk5vkJZFebg9duTOaYThw02+9pxJIE4YGifgaUE'">>/home/developer/.jupyter/jupyter_notebook_config.py
+ENTRYPOINT jupyter lab --ip=0.0.0.0
+
