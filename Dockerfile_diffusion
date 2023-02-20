@@ -17,8 +17,10 @@ WORKDIR /home/developer
 COPY ["Diffusion Model Tutorial.ipynb", "/home/developer/"]
 COPY ["helpers.py", "/home/developer/"]
 COPY ["shiba.jpg", "/home/developer/"]
+COPY ["Diffusion Model Tutorial Exercise.ipynb", "/home/developer/"]
 USER developer
 RUN jupyter notebook --generate-config
+# Passwort is boschai
 RUN echo "c.NotebookApp.password='argon2:\$argon2id\$v=19\$m=10240,t=10,p=8\$pq7MvCpa2M1JYeiiLBvvSQ\$XkvBtk5vkJZFebg9duTOaYThw02+9pxJIE4YGifgaUE'">>/home/developer/.jupyter/jupyter_notebook_config.py
 ENTRYPOINT jupyter lab --ip=0.0.0.0
 

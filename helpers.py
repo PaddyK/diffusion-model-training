@@ -78,14 +78,15 @@ def visualize_forward_diffusion(img: PIL.Image.Image, diffusion_model: AbstractD
     torch_image_batch = torch.stack([img] * num_images_display)
     t = torch.linspace(0, diffusion_model.num_timesteps - 1, num_images_display).long()
     noisy_image_batch, _ = diffusion_model.forward(torch_image_batch, t, device)
-
-    plt.figure(figsize=(15,15))
-    f, ax = plt.subplots(1, num_images_display, figsize = (100,100))
-
+    
+    f, ax = plt.subplots(1, num_images_display + 1, figsize=(2 * (num_images_display + 1), 2))
+    ax[0].imshow(img_transform_inverse(img))
+    ax[0].axis('off')
+    ax[0].set_title("Step: 0", fontsize=12)
     for idx, image in enumerate(noisy_image_batch):
-        ax[idx].imshow(img_transform_inverse(image))
-        ax[idx].axis('off')
-        ax[idx].set_title(f"Iteration: {t[idx].item()}", fontsize = 100)
+        ax[idx + 1].imshow(img_transform_inverse(image))
+        ax[idx + 1].axis('off')
+        ax[idx + 1].set_title(f"Step: {t[idx].item()}", fontsize=12)
     plt.show()
     plt.close("all")
     
@@ -142,14 +143,14 @@ def visualize_trained_classconditioned_unet(diffusion_model, unet: torch.Module,
                                             device: torch.device, image_shape=(32,32)):
     num_classes = len(class_names)
     torch.manual_seed(16)
-    f, ax = plt.subplots(num_classes, num_imgs_to_display, figsize=(15,15))
+    f, ax = plt.subplots(num_classes, num_imgs_to_display, figsize=(2 * num_imgs_to_display, 2 * num_classes))
 
     with torch.no_grad():
         for j, (cidx, name) in enumerate(zip(class_indices, class_names)):
             imgs = torch.randn((num_imgs_to_display, 3) + image_shape).to(device)
             for i in reversed(range(diffusion_model.num_timesteps)):
                 t = torch.full((1,), i, dtype=torch.long, device=device)
-                labels = torch.tensor([cidx] * num_imgs_to_display).resize(num_imgs_to_display, 1).float().to(device)
+                labels = torch.nn.functional.one_hot(torch.tensor([cidx] * num_imgs_to_display), unet.num_classes).float().to(device)
                 imgs = diffusion_model.backward(x_t=imgs, t=t, model=unet.eval().to(device), labels=labels)
             for idx, img in enumerate(imgs):
                 ax[j][idx].imshow(img_transform_inverse(img))
@@ -160,76 +161,64 @@ def visualize_trained_classconditioned_unet(diffusion_model, unet: torch.Module,
     plt.close(f)
     
     
-def get_shibas() -> List[PIL.Image.Image]:
-    filenames = [
-        ("shiba001.png", ""),
-        ("shiba002.png", ""),
-        ("shiba003.png", ""),
-        ("shiba004.png", ""),
-        ("shiba005.png", ""),
-        ("shiba006.png", ""),
-        ("shiba007.png", ""),
-        ("shiba008.png", ""),
-        ("shiba009.png", ""),
-        ("shiba010.png", ""),
-        ("shiba011.png", ""),
-        ("shiba012.png", ""),
-        ("shiba013.png", ""),
-        ("shiba014.png", ""),
-        ("shiba015.png", ""),
-        ("shiba016.png", ""),
-        ("shiba017.png", ""),
-        ("shiba018.png", ""),
-        ("shiba019.png", ""),
-        ("shiba020.png", ""),
-        ("shiba021.png", ""),
-        ("shiba022.png", ""),
-        ("shiba023.png", ""),
-        ("shiba024.png", ""),
-        ("shiba025.png", ""),
-        ("shiba026.png", ""),
-        ("shiba027.png", ""),
-        ("shiba028.png", ""),
-        ("shiba029.png", ""),
-        ("shiba030.png", ""),
-        ("shiba031.png", ""),
-        ("shiba032.png", ""),
-        ("shiba033.png", ""),
-        ("shiba034.png", ""),
-        ("shiba035.png", ""),
-        ("shiba036.png", ""),
-        ("shiba037.png", ""),
-        ("shiba038.png", ""),
-        ("shiba039.png", ""),
-        ("shiba040.png", ""),
-        ("shiba041.png", ""),
-        ("shiba042.png", ""),
-        ("shiba043.png", ""),
-        ("shiba044.png", ""),
-        ("shiba045.png", ""),
-        ("shiba046.png", ""),
-        ("shiba047.png", ""),
-        ("shiba048.png", ""),
-        ("shiba049.png", ""),
-        ("shiba050.png", ""),
-        ("shiba051.png", ""),
-        ("shiba052.png", ""),
-        ("shiba053.png", ""),
-        ("shiba054.png", ""),
-        ("shiba055.png", ""),
-        ("shiba056.png", ""),
-        ("shiba057.png", ""),
-        ("shiba058.png", ""),
-        ("shiba059.png", ""),
-        ("shiba060.png", ""),
-        ("shiba061.png", ""),
-        ("shiba062.png", ""),
-        ("shiba063.png", ""),
-        ("shiba064.png", "")
-    ]
-    images = []
-    for filename, url in filenames:
-        if not os.path.exists(filename):
-            urllib.request.urlretrieve(url, filename)
-        images.append(PIL.Image.open(filename))
-    return images
+def verify_diffusion_init(diffusion_model):
+    actual_betas = torch.linspace(diffusion_model.schedule_start, diffusion_model.schedule_end, diffusion_model.num_timesteps)
+    actual_alphas = 1 - diffusion_model.betas
+    actual_overline_alphas = torch.cumprod(diffusion_model.alphas, axis=0)
+    
+    np.testing.assert_almost_equal(
+        desired=actual_betas.detach().numpy(),
+        actual=diffusion_model.betas.detach().numpy(),
+        decimal=5,
+        err_msg='',
+        verbose=True
+    )
+    np.testing.assert_almost_equal(
+        desired=actual_alphas.detach().numpy(),
+        actual=diffusion_model.alphas.detach().numpy(),
+        decimal=5,
+        err_msg='',
+        verbose=True
+    )
+    np.testing.assert_almost_equal(
+        desired=actual_overline_alphas.detach().numpy(),
+        actual=diffusion_model.overline_alphas.detach().numpy(),
+        decimal=5,
+        err_msg='',
+        verbose=True
+    )
+    print("All tests passed, your diffusion model gets correctly initialized!")
+    
+    
+def verify_positional_encoding_init(encoding):
+    actual_dim = encoding.dim
+    actual_half_dim = actual_dim // 2
+    actual_embedding = np.log(10000) / (actual_half_dim - 1)
+    actual_embedding = torch.exp(torch.arange(actual_half_dim, dtype=torch.float32) * (-1. * actual_embedding))
+    np.testing.assert_almost_equal(
+        actual=encoding.omegas,
+        desired=actual_embedding.detach().numpy(),
+        decimal=5,
+        err_msg="The \\omega parameters do not match.",
+        verbose=True
+    )
+    print("All tests passed, your positional encoding gets correctly initialized!")
+    
+    
+def verify_positional_encoding_forward(encoding):
+    actual_dim = encoding.dim
+    actual_half_dim = actual_dim // 2
+    actual_embedding = np.log(10000) / (actual_half_dim - 1)
+    actual_embedding = torch.exp(torch.arange(actual_half_dim, dtype=torch.float32) * (-1. * actual_embedding))
+    
+    position = torch.arange(34)
+    actual_embedding = position.unsqueeze(1) * actual_embedding.unsqueeze(0)
+    actual_embedding = torch.cat([torch.sin(actual_embedding), torch.cos(actual_embedding)], dim=-1)
+    np.testing.assert_almost_equal(
+        actual=encoding(position).detach().numpy(),
+        desired=actual_embedding.detach().numpy(),
+        decimal=5,
+        err_msg="The computation of the embeddings in the forward pass do not match.",
+        verbose=True
+    )
+    print("All tests passed, your positional encoding computes the correct values!")
